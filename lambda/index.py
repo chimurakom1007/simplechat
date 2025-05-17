@@ -64,10 +64,10 @@ def lambda_handler(event, context):
         print("Calling FastAPI with payload:", json.dumps(api_request_payload))
 
         req = urllib_request(
-            MODEL_ID,
-            data=json.dumps(api_request_payload).encode('utf-8'), # データをUTF-8でエンコード
-            headers={'Content-Type': 'application/json'},
-            method='POST' # HTTPメソッドを明示
+          MODEL_ID + "/generate",  # FastAPIのエンドポイントに /generate を追加
+          data=json.dumps(api_request_payload).encode('utf-8'),
+          headers={'Content-Type': 'application/json'},
+          method='POST'
         )
 
         assistant_response_text = ""
@@ -113,15 +113,15 @@ def lambda_handler(event, context):
         # )
         
         # レスポンスを解析
-        response_body = json.loads(response['body'].read())
-        print("Bedrock response:", json.dumps(response_body, default=str))
+        # response_body = json.loads(response['body'].read())
+        # print("Bedrock response:", json.dumps(response_body, default=str))
         
         # 応答の検証
         if not response_body.get('output') or not response_body['output'].get('message') or not response_body['output']['message'].get('content'):
             raise Exception("No response content from the model")
         
         # アシスタントの応答を取得
-        assistant_response = response_body['output']['message']['content'][0]['text']
+        assistant_response = response_data_from_fastapi["generated_text"]
         
         # アシスタントの応答を会話履歴に追加
         messages.append({
