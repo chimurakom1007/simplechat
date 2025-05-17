@@ -4,7 +4,7 @@ import os
 import boto3
 import re  # 正規表現モジュールをインポート
 from botocore.exceptions import ClientError
-import urllib.request as request
+import urllib.request as urllib_request
 
 # Lambda コンテキストからリージョンを抽出する関数
 def extract_region_from_arn(arn):
@@ -63,7 +63,7 @@ def lambda_handler(event, context):
         } 
         print("Calling FastAPI with payload:", json.dumps(api_request_payload))
 
-        req = request(
+        req = urllib_request(
             MODEL_ID,
             data=json.dumps(api_request_payload).encode('utf-8'), # データをUTF-8でエンコード
             headers={'Content-Type': 'application/json'},
@@ -105,12 +105,12 @@ def lambda_handler(event, context):
         
         print("Calling Bedrock invoke_model API with payload:", json.dumps(request_payload))
         
-        # invoke_model APIを呼び出し
-        response = bedrock_client.invoke_model(
-            modelId=MODEL_ID,
-            body=json.dumps(request_payload),
-            contentType="application/json"
-        )
+        # invoke_model APIを呼び出しだよ
+        # response = bedrock_client.invoke_model(
+        #     modelId=MODEL_ID,
+        #     body=json.dumps(request_payload),
+        #     contentType="application/json"
+        # )
         
         # レスポンスを解析
         response_body = json.loads(response['body'].read())
