@@ -57,7 +57,7 @@ def lambda_handler(event, context):
         
         api_request_payload = {
             "message": message, # または "prompt": message_content 
-            "conversationHistory": conversation_history # FastAPIが履歴をどのように受け取るか
+            "conversationHistory": 256 # FastAPIが履歴をどのように受け取るか
             # あるいは、current_messages_for_api をそのまま送るか、FastAPIの仕様に合わせて整形
             # "messages": current_messages_for_api
         } 
