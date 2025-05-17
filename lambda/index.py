@@ -17,7 +17,7 @@ def lambda_handler(event, context):
         user_message = body['message']
         conversation_history = body.get('conversationHistory', [])
 
-        # Bedrock (Titan Text Lite) のパラメータをFastAPIに渡す
+        # Bedrock (Titan Text Lite) のパラメータをFastAPIに渡
         # FastAPI側のBedrockProxyRequestのフィールド名に合わせる
         max_token_count = body.get('maxTokenCount', 512)
         temperature = body.get('temperature', 0.7)
