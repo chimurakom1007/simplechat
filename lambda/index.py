@@ -117,12 +117,15 @@ def lambda_handler(event, context):
         # print("Bedrock response:", json.dumps(response_body, default=str))
         
         # 応答の検証
-        if not response_body.get('output') or not response_body['output'].get('message') or not response_body['output']['message'].get('content'):
-            raise Exception("No response content from the model")
+        # if not response_body.get('output') or not response_body['output'].get('message') or not response_body['output']['message'].get('content'):
+        #     raise Exception("No response content from the model")
         
-        # アシスタントの応答を取得
+        # FastAPI のレスポンス確認
+        if "generated_text" not in response_data_from_fastapi:
+            raise Exception("FastAPIからの応答に 'generated_text' が含まれていません")
+
         assistant_response = response_data_from_fastapi["generated_text"]
-        
+
         # アシスタントの応答を会話履歴に追加
         messages.append({
             "role": "assistant",
