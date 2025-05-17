@@ -71,7 +71,7 @@ def lambda_handler(event, context):
         )
 
         assistant_response_text = ""
-        with urllib.request.urlopen(req) as http_response:
+        with urllib_request.urlopen(req) as http_response:
             response_body_str = http_response.read().decode('utf-8')
             response_data_from_fastapi = json.loads(response_body_str)
             print("FastAPI response data:", json.dumps(response_data_from_fastapi, default=str))
