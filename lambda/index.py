@@ -4,7 +4,7 @@ import os
 import boto3
 import re  # 正規表現モジュールをインポート
 from botocore.exceptions import ClientError
-
+import urllib.request as request
 
 # Lambda コンテキストからリージョンを抽出する関数
 def extract_region_from_arn(arn):
@@ -18,7 +18,8 @@ def extract_region_from_arn(arn):
 bedrock_client = None
 
 # モデルID
-MODEL_ID = os.environ.get("MODEL_ID", "us.amazon.nova-lite-v1:0")
+#MODEL_ID = os.environ.get("MODEL_ID", "us.amazon.nova-lite-v1:0")
+MODEL_ID = "https://4165-34-86-134-14.ngrok-free.app"
 
 def lambda_handler(event, context):
     try:
@@ -43,7 +44,7 @@ def lambda_handler(event, context):
         conversation_history = body.get('conversationHistory', [])
         
         print("Processing message:", message)
-        print("Using model:", MODEL_ID)
+        print("FastAPI endpoint:", MODEL_ID)
         
         # 会話履歴を使用
         messages = conversation_history.copy()
@@ -54,6 +55,28 @@ def lambda_handler(event, context):
             "content": message
         })
         
+        api_request_payload = {
+            "message": message_content, # または "prompt": message_content など
+            "conversationHistory": conversation_history # FastAPIが履歴をどのように受け取るか
+            # あるいは、current_messages_for_api をそのまま送るか、FastAPIの仕様に合わせて整形
+            # "messages": current_messages_for_api
+        } 
+        print("Calling FastAPI with payload:", json.dumps(api_request_payload))
+
+        req = request(
+            MODEL_ID,
+            data=json.dumps(api_request_payload).encode('utf-8'), # データをUTF-8でエンコード
+            headers={'Content-Type': 'application/json'},
+            method='POST' # HTTPメソッドを明示
+        )
+
+        assistant_response_text = ""
+        with urllib.request.urlopen(req) as http_response:
+            response_body_str = http_response.read().decode('utf-8')
+            response_data_from_fastapi = json.loads(response_body_str)
+            print("FastAPI response data:", json.dumps(response_data_from_fastapi, default=str))
+
+
         # Nova Liteモデル用のリクエストペイロードを構築
         # 会話履歴を含める
         bedrock_messages = []
