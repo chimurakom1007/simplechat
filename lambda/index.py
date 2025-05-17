@@ -19,7 +19,7 @@ bedrock_client = None
 
 # モデルID
 #MODEL_ID = os.environ.get("MODEL_ID", "us.amazon.nova-lite-v1:0")
-MODEL_ID = "https://4165-34-86-134-14.ngrok-free.app"
+MODEL_ID = "https://933d-34-86-134-14.ngrok-free.app"
 
 def lambda_handler(event, context):
     try:
@@ -56,14 +56,14 @@ def lambda_handler(event, context):
         })
         
         api_request_payload = {
-            "message": message_content, # または "prompt": message_content 
+            "message": message, # または "prompt": message_content 
             "conversationHistory": conversation_history # FastAPIが履歴をどのように受け取るか
             # あるいは、current_messages_for_api をそのまま送るか、FastAPIの仕様に合わせて整形
             # "messages": current_messages_for_api
         } 
         print("Calling FastAPI with payload:", json.dumps(api_request_payload))
 
-        req = urllib_request(
+        req = urllib_request.Request(
           MODEL_ID + "/generate",  # FastAPIのエンドポイントに /generate を追加
           data=json.dumps(api_request_payload).encode('utf-8'),
           headers={'Content-Type': 'application/json'},
