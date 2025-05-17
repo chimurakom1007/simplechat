@@ -1,166 +1,95 @@
-# lambda/index.py
 import json
 import os
-import boto3
-import re  # 正規表現モジュールをインポート
-from botocore.exceptions import ClientError
+import re # re はリージョン抽出以外では不要かも
 import urllib.request as urllib_request
+import urllib.error
 
-# Lambda コンテキストからリージョンを抽出する関数
-def extract_region_from_arn(arn):
-    # ARN 形式: arn:aws:lambda:region:account-id:function:function-name
-    match = re.search('arn:aws:lambda:([^:]+):', arn)
-    if match:
-        return match.group(1)
-    return "us-east-1"  # デフォルト値
-
-# グローバル変数としてクライアントを初期化（初期値）
-bedrock_client = None
-
-# モデルID
-#MODEL_ID = os.environ.get("MODEL_ID", "us.amazon.nova-lite-v1:0")
-MODEL_ID = "https://3fc4-34-86-134-14.ngrok-free.app"
+# FastAPIのエンドポイントURL (ngrokで公開されるURL)
+# このURLはFastAPIを起動するたびに変わる可能性があります。
+FASTAPI_BASE_URL = "https://71d8-34-86-134-14.ngrok-free.app/" # ★★★ 必ず最新のngrok URLに更新 ★★★
+FASTAPI_GENERATE_PATH = "/generate"
 
 def lambda_handler(event, context):
     try:
-        # コンテキストから実行リージョンを取得し、クライアントを初期化
-        global bedrock_client
-        if bedrock_client is None:
-            region = extract_region_from_arn(context.invoked_function_arn)
-            bedrock_client = boto3.client('bedrock-runtime', region_name=region)
-            print(f"Initialized Bedrock client in region: {region}")
-        
         print("Received event:", json.dumps(event))
-        
-        # Cognitoで認証されたユーザー情報を取得
-        user_info = None
-        if 'requestContext' in event and 'authorizer' in event['requestContext']:
-            user_info = event['requestContext']['authorizer']['claims']
-            print(f"Authenticated user: {user_info.get('email') or user_info.get('cognito:username')}")
-        
-        # リクエストボディの解析
+
         body = json.loads(event['body'])
-        message = body['message']
+        user_message = body['message']
         conversation_history = body.get('conversationHistory', [])
-        
-        print("Processing message:", message)
-        print("FastAPI endpoint:", MODEL_ID)
-        
-        # 会話履歴を使用
-        messages = conversation_history.copy()
-        
-        # ユーザーメッセージを追加
-        messages.append({
-            "role": "user",
-            "content": message
-        })
-        
+
+        # Bedrock (Titan Text Lite) のパラメータをFastAPIに渡す
+        # FastAPI側のBedrockProxyRequestのフィールド名に合わせる
+        max_token_count = body.get('maxTokenCount', 512)
+        temperature = body.get('temperature', 0.7)
+        top_p = body.get('topP', 0.9)
+        # stop_sequences = body.get('stopSequences', []) # 必要なら
+
+        print(f"Processing message: '{user_message}' to be sent to FastAPI (Bedrock Proxy)")
+        full_fastapi_url = FASTAPI_BASE_URL + FASTAPI_GENERATE_PATH
+        print(f"Target FastAPI (Bedrock Proxy) endpoint: {full_fastapi_url}")
+
+        # 会話履歴と現在のメッセージを結合してプロンプトを作成
+        prompt_parts = []
+        for entry in conversation_history:
+            role = entry.get('role', 'User').capitalize()
+            content = entry.get('content', '')
+            prompt_parts.append(f"{role}: {content}")
+        prompt_parts.append(f"User: {user_message}")
+        prompt_parts.append("Bot:") # Titanモデルへの指示として
+        final_prompt = "\n".join(prompt_parts)
+
+        # FastAPI (Bedrockプロキシ) へのリクエストペイロード
         api_request_payload = {
-            "message": message, # または "prompt": message_content 
-            "conversationHistory": 256 # FastAPIが履歴をどのように受け取るか
-            # あるいは、current_messages_for_api をそのまま送るか、FastAPIの仕様に合わせて整形
-            # "messages": current_messages_for_api
-        } 
-        print("Calling FastAPI with payload:", json.dumps(api_request_payload))
+            "prompt": final_prompt,
+            "maxTokenCount": max_token_count,
+            "temperature": temperature,
+            "topP": top_p
+            # "stopSequences": stop_sequences # 必要なら
+        }
+        print("Calling FastAPI (Bedrock Proxy) with payload:", json.dumps(api_request_payload))
 
         req = urllib_request.Request(
-          MODEL_ID + "/generate",  # FastAPIのエンドポイントに /generate を追加
-          data=json.dumps(api_request_payload).encode('utf-8'),
-          headers={'Content-Type': 'application/json'},
-          method='POST'
+            full_fastapi_url,
+            data=json.dumps(api_request_payload).encode('utf-8'),
+            headers={'Content-Type': 'application/json'},
+            method='POST'
         )
 
         assistant_response_text = ""
         with urllib_request.urlopen(req) as http_response:
             response_body_str = http_response.read().decode('utf-8')
             response_data_from_fastapi = json.loads(response_body_str)
-            print("FastAPI response data:", json.dumps(response_data_from_fastapi, default=str))
+            print("FastAPI (Bedrock Proxy) response data:", json.dumps(response_data_from_fastapi, default=str))
 
+            if "generated_text" not in response_data_from_fastapi:
+                raise Exception(f"FastAPI (Bedrock Proxy) からの応答に 'generated_text' が含まれていません。応答: {response_body_str}")
+            assistant_response_text = response_data_from_fastapi["generated_text"]
 
-        # Nova Liteモデル用のリクエストペイロードを構築
-        # 会話履歴を含める
-        bedrock_messages = []
-        for msg in messages:
-            if msg["role"] == "user":
-                bedrock_messages.append({
-                    "role": "user",
-                    "content": [{"text": msg["content"]}]
-                })
-            elif msg["role"] == "assistant":
-                bedrock_messages.append({
-                    "role": "assistant", 
-                    "content": [{"text": msg["content"]}]
-                })
-        
-        # invoke_model用のリクエストペイロード
-        request_payload = {
-            "messages": bedrock_messages,
-            "inferenceConfig": {
-                "maxTokens": 512,
-                "stopSequences": [],
-                "temperature": 0.7,
-                "topP": 0.9
-            }
-        }
-        
-        print("Calling Bedrock invoke_model API with payload:", json.dumps(request_payload))
-        
-        # invoke_model APIを呼び出しだよ
-        # response = bedrock_client.invoke_model(
-        #     modelId=MODEL_ID,
-        #     body=json.dumps(request_payload),
-        #     contentType="application/json"
-        # )
-        
-        # レスポンスを解析
-        # response_body = json.loads(response['body'].read())
-        # print("Bedrock response:", json.dumps(response_body, default=str))
-        
-        # 応答の検証
-        # if not response_body.get('output') or not response_body['output'].get('message') or not response_body['output']['message'].get('content'):
-        #     raise Exception("No response content from the model")
-        
-        # FastAPI のレスポンス確認
-        if "generated_text" not in response_data_from_fastapi:
-            raise Exception("FastAPIからの応答に 'generated_text' が含まれていません")
+        # 会話履歴の更新
+        updated_conversation_history = conversation_history.copy()
+        updated_conversation_history.append({"role": "user", "content": user_message})
+        updated_conversation_history.append({"role": "assistant", "content": assistant_response_text})
 
-        assistant_response = response_data_from_fastapi["generated_text"]
-
-        # アシスタントの応答を会話履歴に追加
-        messages.append({
-            "role": "assistant",
-            "content": assistant_response
-        })
-        
-        # 成功レスポンスの返却
         return {
             "statusCode": 200,
             "headers": {
                 "Content-Type": "application/json",
                 "Access-Control-Allow-Origin": "*",
-                "Access-Control-Allow-Headers": "Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token",
-                "Access-Control-Allow-Methods": "OPTIONS,POST"
             },
             "body": json.dumps({
                 "success": True,
-                "response": assistant_response,
-                "conversationHistory": messages
+                "response": assistant_response_text,
+                "conversationHistory": updated_conversation_history
             })
         }
-        
+
+    except urllib.error.HTTPError as e:
+        error_body = "No error body from FastAPI."
+        try: error_body = e.read().decode()
+        except: pass
+        print(f"HTTPError calling FastAPI: {e.code} - {e.reason}. Body: {error_body}")
+        return {"statusCode": e.code if hasattr(e, 'code') else 500, "body": json.dumps({"success": False, "error": f"FastAPI Error: {e.reason}", "details": error_body})}
     except Exception as error:
-        print("Error:", str(error))
-        
-        return {
-            "statusCode": 500,
-            "headers": {
-                "Content-Type": "application/json",
-                "Access-Control-Allow-Origin": "*",
-                "Access-Control-Allow-Headers": "Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token",
-                "Access-Control-Allow-Methods": "OPTIONS,POST"
-            },
-            "body": json.dumps({
-                "success": False,
-                "error": str(error)
-            })
-        }
+        print(f"Error: {str(error)}")
+        traceback.print_exc()
+        return {"statusCode": 500, "body": json.dumps({"success": False, "error": str(error)})}
