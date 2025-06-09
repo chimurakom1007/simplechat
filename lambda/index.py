@@ -22,7 +22,8 @@ bedrock_client = None
 def lambda_handler(event, context):
     try:
         # コンテキストから実行リージョンを取得し、クライアントを初期化
-	@@ -28,85 +27,74 @@ def lambda_handler(event, context):
+        global bedrock_client
+        if bedrock_client is None:
             region = extract_region_from_arn(context.invoked_function_arn)
             bedrock_client = boto3.client('bedrock-runtime', region_name=region)
             print(f"Initialized Bedrock client in region: {region}")
@@ -82,7 +83,7 @@ def lambda_handler(event, context):
         # 外部APIのレスポンスからアシスタントの応答を取得
         if 'generated_text' not in response_body:
             raise Exception("Missing 'generated_text' in external API response")
-
+        
         assistant_response = response_body['generated_text'].replace("\\n", "\n")
         response_time = response_body['response_time']
         formatted_time = f'{response_time:.3f}'
@@ -91,13 +92,16 @@ def lambda_handler(event, context):
             raise Exception("No 'response' field found in external API response")
 
         # 正常レスポンスを返却
-
+        
         # 成功レスポンスの返却
         # "body"の部分は各辞書の値は全体でstrではいけないのでjson.dumpsで全体をjson形式のstrにする
         return {
             "statusCode": 200,
             "headers": {
-	@@ -117,9 +105,9 @@ def lambda_handler(event, context):
+                "Content-Type": "application/json",
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Headers": "Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token",
+                "Access-Control-Allow-Methods": "OPTIONS,POST"
             },
             "body": json.dumps({
                 "success": True,
@@ -105,5 +109,20 @@ def lambda_handler(event, context):
                 "response_time": formatted_time
             }) 
         }
-
+        
     except Exception as error:
+        print("Error:", str(error))
+        
+        return {
+            "statusCode": 500,
+            "headers": {
+                "Content-Type": "application/json",
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Headers": "Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token",
+                "Access-Control-Allow-Methods": "OPTIONS,POST"
+            },
+            "body": json.dumps({
+                "success": False,
+                "error": str(error)
+            })
+        }
