@@ -16,7 +16,7 @@ def extract_region_from_arn(arn):
         return match.group(1)
     return "us-east-1"
 
-# グローバル変数としてクライアントを初期化（初期値）
+# グローバル変数としてクライアントを初期化（初期
 bedrock_client = None
 
 def lambda_handler(event, context):
