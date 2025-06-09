@@ -9,7 +9,7 @@ from botocore.exceptions import ClientError
 # 環境変数から外部APIのURLを取得
 EXTERNAL_API_URL = os.environ.get("EXTERNAL_API_URL", "https://ebb7-34-56-215-37.ngrok-free.app/generate")
 
-# Lambdaコンテキストからリージョンを抽出（未使用だけど一応残
+# Lambdaコンテキストからリージョンを抽出（未使用だけど一応残す）
 def extract_region_from_arn(arn):
     match = re.search(r'arn:aws:lambda:([^:]+):', arn)
     if match:
